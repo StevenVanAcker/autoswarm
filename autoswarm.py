@@ -52,6 +52,7 @@ class AutoSwarmCommon():
 
 class AutoSwarmSlave(AutoSwarmCommon):
         MSGMAXWAIT = 15
+        LOOPTIME = 30
 
         def __init__(self): #{{{
             super().__init__()
@@ -67,11 +68,29 @@ class AutoSwarmSlave(AutoSwarmCommon):
                     msgdata = json.loads(msg.body)
                     msg.delete()
 
+                    if msgdata["cmd"] == "join":
+                        if self.joinSwarm(msgdata["master"], msgdata["jointoken"]):
+                            self.logger.debug("Successfully joined swarm")
+                        else:
+                            self.logger.debug("Failed to join swarm")
+
             except botocore.exceptions.NoRegionError as e:
                 self.logger.error("processMessageFromMaster() received NoRegionError from boto3: {}".format(e))
                 time.sleep(1)
             except Exception as e:
                 self.logger.error("processMessageFromMaster() threw an exception: {}".format(e))
+#}}}
+        def joinSwarm(self, master, token): #{{{
+            try:
+                d = docker.from_env()
+                return d.swarm.join(
+                        remote_addrs=[master], 
+                        listen_addr="0.0.0.0",
+                        join_token=token
+                        )
+            except Exception as e:
+                self.logger.error("joinSwarm() threw exception: {}".format(e))
+            return False
 #}}}
         def joinedSwarm(self): #{{{
             try:
@@ -83,18 +102,20 @@ class AutoSwarmSlave(AutoSwarmCommon):
             return False 
 #}}}
         def run(self): #{{{
-            while not self.joinedSwarm():
-                self.queue = "AutoSwarmSlave-" + ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(16))
-                print("queue = {}".format(self.queue))
-                self.get_maybe_create_queue(self.queue)
-                self.send_message_to_queue(self.SQS_QUEUE_MASTER, {
-                        "cmd": "join",
-                        "timestamp": time.time(),
-                        "queue": self.queue
-                })
-                self.processMessageFromMaster()
-                self.maybe_delete_queue(self.queue)
-                self.queue = None
+            while True:
+                if not self.joinedSwarm():
+                    self.queue = "AutoSwarmSlave-" + ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(16))
+                    print("queue = {}".format(self.queue))
+                    self.get_maybe_create_queue(self.queue)
+                    self.send_message_to_queue(self.SQS_QUEUE_MASTER, {
+                            "cmd": "join",
+                            "timestamp": time.time(),
+                            "queue": self.queue
+                    })
+                    self.processMessageFromMaster()
+                    self.maybe_delete_queue(self.queue)
+                    self.queue = None
+                time.sleep(self.LOOPTIME)
 #}}}
 
 
