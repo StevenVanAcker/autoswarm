@@ -51,7 +51,7 @@ class AutoSwarmCommon():
 #}}}
 
 class AutoSwarmSlave(AutoSwarmCommon):
-        MSGMAXWAIT = 1
+        MSGMAXWAIT = 15
 
         def __init__(self): #{{{
             super().__init__()
@@ -100,8 +100,8 @@ class AutoSwarmSlave(AutoSwarmCommon):
 
 # loop and read all messages, then send same recipe to all hosts
 class AutoSwarmMaster(AutoSwarmCommon):
-        MSGMAXWAIT = 3
-        MSGMAXAGE = 3
+        MSGMAXWAIT = 15
+        MSGMAXAGE = 10
 
         def initSwarm(self): #{{{
             try:
