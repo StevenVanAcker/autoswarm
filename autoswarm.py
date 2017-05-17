@@ -23,18 +23,19 @@ class AutoSwarmCommon():
             ch.setFormatter(formatter)
             self.logger.addHandler(ch)
 #}}}
-        def get_maybe_create_queue(self, queuename): #{{{
+        def get_maybe_create_queue(self, queuename, create=True): #{{{
             sqs = boto3.resource('sqs') 
             inq = None
             try:
                 inq = sqs.get_queue_by_name(QueueName=queuename)
                 return inq
             except Exception as e:
-                inq = sqs.create_queue(QueueName=queuename)
+                if create:
+                    inq = sqs.create_queue(QueueName=queuename)
             return inq
 #}}}
-        def send_message_to_queue(self, queuename, msg): #{{{
-            q = self.get_maybe_create_queue(queuename)
+        def send_message_to_queue(self, queuename, msg, create=True): #{{{
+            q = self.get_maybe_create_queue(queuename, create=create)
             if q != None:
                 q.send_message(MessageBody=json.dumps(msg))
                 return True
@@ -163,13 +164,15 @@ class AutoSwarmMaster(AutoSwarmCommon):
                         jointoken = self.getJoinToken()
                         masteraddress = self.getMasterAddress()
                         if jointoken != None and masteraddress != None:
-                            self.logger.debug("Sending back join-token and master address")
-                            self.send_message_to_queue(msgdata["queue"], {
+                            if self.send_message_to_queue(msgdata["queue"], {
                                 "cmd": "join",
                                 "timestamp": time.time(),
                                 "jointoken": jointoken,
                                 "master": masteraddress
-                            })
+                            }, create=False):
+                                self.logger.debug("Sent back join-token and master address")
+                            else:
+                                self.logger.debug("Slave queue does not exist, not sending back join-token and master address")
                         else:
                             self.logger.debug("Could not get information, ignoring slave for now")
                     else:
