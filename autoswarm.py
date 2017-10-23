@@ -55,9 +55,10 @@ class AutoSwarmSlave(AutoSwarmCommon):
         MSGMAXWAIT = 15
         LOOPTIME = 30
 
-        def __init__(self): #{{{
+        def __init__(self, dry=False): #{{{
             super().__init__()
             self.queue = None
+            self.dry = dry
 #}}}
         def processMessageFromMaster(self): # FIXME {{{
             try:
@@ -82,6 +83,8 @@ class AutoSwarmSlave(AutoSwarmCommon):
                 self.logger.error("processMessageFromMaster() threw an exception: {}".format(e))
 #}}}
         def joinSwarm(self, master, token): #{{{
+            if self.dry:
+                return True
             try:
                 d = docker.from_env()
                 return d.swarm.join(
@@ -94,6 +97,8 @@ class AutoSwarmSlave(AutoSwarmCommon):
             return False
 #}}}
         def joinedSwarm(self): #{{{
+            if self.dry:
+                return False
             try:
                 d = docker.from_env()
                 return "active" == d.info()["Swarm"]["LocalNodeState"]
@@ -118,7 +123,6 @@ class AutoSwarmSlave(AutoSwarmCommon):
                     self.queue = None
                 time.sleep(self.LOOPTIME)
 #}}}
-
 
 # loop and read all messages, then send same recipe to all hosts
 class AutoSwarmMaster(AutoSwarmCommon):
