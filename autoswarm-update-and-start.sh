@@ -5,6 +5,7 @@ REPODIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$REPODIR"
 
 mode=$1
+addr=$2
 
 while true;
 do
@@ -15,7 +16,7 @@ do
 		./autoswarm.py
 		;;
 	    master)
-		./autoswarm-master.py
+		./autoswarm-master.py $addr
 		;;
 	esac
 	sleep 1 # avoid busy-loop

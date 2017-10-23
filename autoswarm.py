@@ -12,6 +12,9 @@ import collections
 import logging
 import random, string
 
+import netifaces
+from netaddr import IPNetwork, IPAddress
+
 class AutoSwarmCommon():
         SQS_QUEUE_MASTER = "AutoSwarmMaster"
 
@@ -111,7 +114,7 @@ class AutoSwarmSlave(AutoSwarmCommon):
             while True:
                 if not self.joinedSwarm():
                     self.queue = "AutoSwarmSlave-" + ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(16))
-                    print("queue = {}".format(self.queue))
+                    self.logger.debug("queue = {}".format(self.queue))
                     self.get_maybe_create_queue(self.queue)
                     self.send_message_to_queue(self.SQS_QUEUE_MASTER, {
                             "cmd": "join",
@@ -129,10 +132,57 @@ class AutoSwarmMaster(AutoSwarmCommon):
         MSGMAXWAIT = 15
         MSGMAXAGE = 10
 
+        def __init__(self): #{{{
+            super().__init__()
+            self.addr = None
+#}}}
+        def setAddress(self, addr): #{{{
+            # for dockerpy, the addr can be an IP address or interface, optionally followed by a port.
+            # In our case, we also want to be able to specify a CIDR range, with optional port.
+            if "/" in addr:
+                self.logger.debug("setAddress() detected a CIDR range.")
+                # The user specified a CIDR with optional port.
+                port = None
+                iprange = None
+                interface = None
+
+                parts = addr.split(":")
+                iprange = parts[0]
+
+                if len(parts) > 1:
+                    port = parts[1]
+
+                for tryinterface in netifaces.interfaces():
+                    ip = None
+                    try:
+                        ip = netifaces.ifaddresses(tryinterface)[netifaces.AF_INET][0]['addr']
+                    except:
+                        pass
+
+                    if ip != None and IPAddress(ip) in IPNetwork(iprange):
+                        interface = tryinterface
+                        break
+
+                if interface != None:
+                    if port != None:
+                        self.addr = "{}:{}".format(interface, port)
+                    else:
+                        self.addr = interface
+                    self.logger.debug("Best guess for given IP-range {} is interface {}, address {}".format(iprange, interface, self.addr))
+                else:
+                    self.logger.debug("Could not determine an interface for given IP-range {}".format(iprange))
+            else:
+                self.addr = addr
+                self.logger.debug("setAddress() set address to {}".format(self.addr))
+#}}}
         def initSwarm(self): #{{{
             try:
                 d = docker.from_env()
-                return d.swarm.init()
+                if self.addr != None:
+                    res = d.swarm.init(advertise_addr=self.addr)
+                else:
+                    res = d.swarm.init()
+                return res
             except Exception as e:
                 self.logger.debug("Swarm init {}".format(e))
             return None
